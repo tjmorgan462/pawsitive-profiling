@@ -8,5 +8,5 @@
 - dog_api.R: Contains the code used to retrieve the initial dataset
 - dog_app.R: Contains the code used to create the Shiny application
 - dog_data.csv: The clean dataset for this project
-- pawsitive_profiling.pdf: Our slide deck for the final presentation
-- team_7_summary.pdf: The written summary of all of our findings
+- pawsitive_profiling.pdf: Our slides for the final presentation
+- team_7_summary.pdf: The summary of this project
