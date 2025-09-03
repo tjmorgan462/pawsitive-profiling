@@ -1,0 +1,515 @@
+---
+title: "Data_Vis_Final_Proj_Workspace"
+author: "Daniel Iovino, Thompson Morgan, Niyati Parekh"
+date: "2024-12-12"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+## Libraries ##
+# Load in necessary libraries
+library (tidyverse)     #Tidier data manipulation
+library(dplyr)          #data frame tools (part of tidyverse)
+library(ggplot2)        #Graphing tools (part of tidyverse)
+library(tm)             #Text mining
+library(tidytext)       #Text processing
+library(textdata)       #Access text data
+library(wordcloud)      #Word cloud visual
+library(wordcloud2)     #Custom word cloud shapes
+```
+
+```{r}
+## Setting Up the Data ##
+# Read in data with read.csv() function
+dogs <- read.csv("dog_data.csv")
+# Glimpse dog data for sanity
+glimpse(dogs)
+```
+
+
+
+```{r}
+# Remove unnecessary rows 
+# Removed rows: status, data id, physical lifespan, physical size, coat length, 
+dog_data_clean <- dogs[ , -c(1, 2, 3, 13, 14, 19)]
+
+head(dog_data_clean)
+colnames(dog_data_clean)
+
+# Rename the rows for readability
+dog_data_clean <- dog_data_clean %>%
+  rename(
+    Name = data.general.name, 
+    Group = data.general.group, 
+    Personality_Trait = data.general.personalityTraits,
+    Short_Description = data.general.shortDescription,
+    Long_Description = data.general.longDescription, 
+    Popularity = data.general.popularity, 
+    Height = data.general.height,
+    Weight = data.general.weight,
+    General_Lifespan = data.general.lifespan,
+    Drooling = data.physical.droolingFrequency,
+    Coat_Style = data.physical.coatStyle, 
+    Coat_Texture = data.physical.coatTexture, 
+    Double_Coat = data.physical.doubleCoat, 
+    Family_Affection = data.behavior.familyAffection, 
+    Child_Friendly = data.behavior.childFriendly, 
+    Sociability = data.behavior.dogSociability, 
+    Friendliness_Strangers = data.behavior.friendlinessToStrangers, 
+    Playfulness = data.behavior.playfulness, 
+    Protective_Instincts = data.behavior.protectiveInstincts, 
+    Adaptibility = data.behavior.adaptability, 
+    Barking_Frequency = data.behavior.barkingFrequency, 
+    Shedding_Amount = data.care.sheddingAmount, 
+    Grooming_Frequnecy = data.care.groomingFrequency, 
+    Exercise_Needs = data.care.exerciseNeeds, 
+    Mental_Stimulation_Needs = data.care.mentalStimulationNeeds, 
+    Care_Training = data.care.trainingDifficulty, 
+    Indoor_Image1 = data.images.small.indoors, 
+    Outdoor_Image1 = data.images.small.outdoors, 
+    Studio_Image1 = data.images.small.studio, 
+    Indoor_Image2 = data.images.large.indoors, 
+    Outdoor_Image2 = data.images.large.outdoors,
+    Studio_Image2 = data.images.large.studio)
+
+# Change column into numeric toget ready for data visualization 
+dog_data_clean <- dog_data_clean %>%
+  mutate(
+    Popularity = as.numeric(Popularity),
+    Height = as.numeric(Height), 
+    Weight = as.numeric(Weight), 
+    General_Lifespan = as.numeric(General_Lifespan), 
+    Drooling = as.numeric(Drooling),
+    Family_Affection = as.numeric(Family_Affection), 
+    Child_Friendly = as.numeric(Child_Friendly), 
+    Sociability = as.numeric(Sociability), 
+    Friendliness_Strangers = as.numeric(Friendliness_Strangers), 
+    Playfulness = as.numeric(Playfulness), 
+    Protective_Instincts = as.numeric(Protective_Instincts), 
+    Adaptibility = as.numeric(Adaptibility), 
+    Barking_Frequency = as.numeric(Barking_Frequency), 
+    Shedding_Amount = as.numeric(Shedding_Amount), 
+    Grooming_Frequnecy = as.numeric(Grooming_Frequnecy), 
+    Exercise_Needs = as.numeric(Exercise_Needs), 
+    Mental_Stimulation_Needs = as.numeric(Mental_Stimulation_Needs), 
+    Care_Training = as.numeric(Care_Training))
+```
+
+
+
+```{r}
+# Colnames() for sanity
+colnames(dog_data_clean)
+
+# Mess with the data through the various basic methods
+# Look at all unique types of dogs adopted
+unique(dog_data_clean$Group)
+# Companion, Working, Herding, Sporting, Hound, Guardian, Terrier
+unique(dog_data_clean$Personality_Trait)
+
+# Create a basic ggplot histogram displaying all dogs grouped by with "Group" they are labelled as
+ggplot(dog_data_clean, aes(x = factor(Group))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Number of Dogs in Each Group",
+    x = "Group",
+    y = "Number of Dogs"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+```
+
+```{r}
+# Create 7 subsets that group the dogs into their assigned "Group"
+# Going forwards, the following set of graphs will be identical but separated by group
+Companion_data <- subset(dog_data_clean, Group == "Companion")  
+Guardian_data <- subset(dog_data_clean, Group == "Guardian")
+Herding_data <- subset(dog_data_clean, Group == "Herding")
+Hound_data <- subset(dog_data_clean, Group == "Hound")
+Sporting_data <- subset(dog_data_clean, Group == "Sporting")
+Terrier_data <- subset(dog_data_clean, Group == "Terrier")
+Working_data <- subset(dog_data_clean, Group == "Working")
+```
+
+```{r}
+##  Wordclouds  ##
+
+## Wordcloud chart - Working dogs ##
+# Tokenize and clean data
+Working_dog_word_freq <- Working_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey","steelblue4", "steelblue") 
+
+# Generate the word cloud
+wordcloud(
+  words = Working_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Working_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+
+## Wordcloud chart - Terrier dogs ##
+Terrier_dog_word_freq <- Terrier_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey", "red3", "red") 
+
+# Generate the word cloud
+wordcloud(
+  words = Terrier_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Terrier_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+## Wordcloud chart - Sporting dogs ##
+# Tokenize and clean data
+Sporting_dog_word_freq <- Sporting_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey", "orange3", "orange") 
+
+# Generate the word cloud
+wordcloud(
+  words = Sporting_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Sporting_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+## Wordcloud chart - Herding dogs ##
+# Tokenize and clean data
+Herding_dog_word_freq <- Herding_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey","gold4", "gold2") 
+
+# Generate the word cloud
+wordcloud(
+  words = Herding_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Herding_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+## Wordcloud chart - Hound dogs ##
+# Tokenize and clean data
+Hound_dog_word_freq <- Hound_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey","firebrick4", "firebrick") 
+
+# Generate the word cloud
+wordcloud(
+  words = Hound_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Hound_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+## Wordcloud chart - Guardian dogs ##
+# Tokenize and clean data
+Guardian_dog_word_freq <- Guardian_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey","green3", "forestgreen") 
+
+# Generate the word cloud
+wordcloud(
+  words = Guardian_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Guardian_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+## Wordcloud chart - Companion dogs ##
+# Tokenize and clean data
+Companion_dog_word_freq <- Companion_data %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("darkgrey","magenta2", "magenta4") 
+
+# Generate the word cloud
+wordcloud(
+  words = Companion_dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Companion_dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+```
+
+```{r}
+## Dog-shaped wordcloud ##
+# Wordcloud for all dogs
+Dog_word_freq <- dog_data_clean %>%
+  filter(Short_Description != "") %>%           # filter for rows where short description is not empty and remove all others
+  unnest_tokens(word, Short_Description) %>%    # Split short_description into individual words
+  anti_join(stop_words, by = "word") %>% # Remove common stop words
+  count(word, sort = TRUE)               # Count how often each word appears
+
+# Define custom color palette
+custom_colors <- c("steelblue", "steelblue4","gold4", "gold3","gold2", "gold") 
+
+# Generate the word cloud
+dog_wordcloud <- wordcloud(
+  words = Dog_word_freq$word,        # words to include in the cloud from word_freq$word`
+  freq = Dog_word_freq$n,
+  max.words = 100,               # Maximum number of words
+  random.order = FALSE,          # Largest words in the center
+  colors =  custom_colors)       # Custom color palette
+
+# Add in custom shape later
+
+```
+
+```{r}
+## Graph height vs weight scatterplot
+ggplot(dog_data_clean, aes(x = Height, y = Weight, color = Group)) +
+  geom_point(size = 3) +  # Add points to the scatterplot
+  labs(title = "Height vs Weight of Different Adoptable Dog Breeds", 
+       x = "Height (in)", 
+       y = "Weight (lbs)") + 
+  scale_color_manual(values = c("Hound" = "firebrick", "Terrier" = "red", 
+                                "Companion" = "magenta4", "Working" = "steelblue", 
+                                "Sporting" = "orange", "Herding" = "gold2", 
+                                "Guardian" = "forestgreen")) +  # Optional: Manually set colors
+  theme_minimal() + # Set a minimal theme
+  theme(plot.title = element_text(hjust = 0.5))   #Center title
+```
+
+```{r}
+## Ranking Popularity ###
+# Working Dog Popularity
+ggplot(Working_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Working Dog breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+# Terrier Dog Popularity
+ggplot(Terrier_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Terrier Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+# Sporting Dog Popularity
+ggplot(Sporting_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Sporting Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+# Hound Dog Popularity
+ggplot(Hound_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Hound Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+# Herding Dog Popularity
+ggplot(Herding_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Herding Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+
+# Guardian Dog Popularity
+ggplot(Guardian_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Guardian Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))               # Centers title of graph
+
+
+# Companion Dog Popularity
+ggplot(Companion_data, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Companion Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))   # Centers title of graph
+
+## All Dogs Popularity
+ggplot(dog_data_clean, aes(x = factor(Popularity))) +
+  geom_bar(stat = "count") +  # Count the number of dogs in each group
+  labs(
+    title = "Frequency of Popularity Ratings for Adoptable Dog Breeds",
+    x = "Popularity (1-5)",
+    y = "Rating Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+        plot.title = element_text(hjust = 0.5))   # Centers title of graph
+
+
+
+
+```
+
+```{r}
+## Current graph for All Dogs Popularity Ranking (1-5)
+# ggplot(dog_data_clean, aes(x = factor(Popularity))) +
+ # geom_bar(stat = "count") +  # Count the number of dogs in each group
+  #labs(
+   # title = "Frequency of Popularity Ratings for Adoptable Dog Breeds",
+    #x = "Popularity (1-5)",
+    #y = "Rating Frequency"
+#  ) +
+ # theme_minimal() +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1),    # Rotate x-axis labels for readability
+   #     plot.title = element_text(hjust = 0.5))   # Centers title of graph
+
+# To-do: 
+# change 1-5 ranking system to the following
+  # Number 1 = Most Unpopular
+  # Number 2 = Unpopular
+  # Number 3 = Neutral
+  # Number 4 = Popular
+  # Number 5 = Most Popular
+# Establish colors for each of the 7 dog breeds, adjust to corresponding graphs
+
+# Change the Ranking System of the Popularity
+# Use mutate() function to create a copy of Popularity column, named "Popularity_chr)
+dog_data_clean <- dog_data_clean %>%
+  mutate(Popularity_Chr = Popularity)
+# check if popularity_chr column is numeric or character
+str(dog_data_clean$Popularity_Chr)
+# Mutate again to change numeric ranking system (1-5) in Popularity_chr to character-based ranking system
+dog_data_clean <- dog_data_clean %>%
+  mutate(Popularity_Chr = recode(Popularity_Chr, 
+                                 `1` = "Most Unpopular",
+                                 `2` = "Unpopular",
+                                 `3` = "Neutral",
+                                 `4` = "Popular",
+                                 `5` = "Most Popular"))
+
+
+Dog_Popularity_Rating <- dog_data_clean %>%
+  group_by(Group, Popularity_Chr) %>%
+  summarize(Count = n(), .groups = 'drop')
+
+Dog_Popularity_Rating$Popularity_Chr <- factor(Dog_Popularity_Rating$Popularity_Chr, 
+                                               levels = 
+                                                 c("most unpopular", "unpopular", "neutral", "popular", "most popular"))
+
+
+ggplot(Dog_Popularity_Rating) +
+        (aes(x = Popularity_Chr, y = Count, fill = Group)) +
+        geom_bar(stat = "identity", position = "stack") +  # Create side-by-side bars for each type
+        labs(title = "Dog Breed Popularity Assigned Group",
+             x = "Popularity",
+             y = "Count",
+             fill = "Group") +
+        scale_fill_manual(values = c("Companion" = "magenta4", "Guardian" = "forestgreen", "Herding" = "gold2", "Hound" = "firebrick", "Sporting" = "orange", "Terrier" = "red", "Working" = "steelblue")) +  # Custom colors
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5),
+              axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+##  Heat Map for Family Affection vs Child Friendliness  ##
+## All Dogs Heat Map
+# Manipulate data
+Dog_df <- dog_data_clean %>%
+  filter(Family_Affection != "", Child_Friendly != "") %>%
+  count(Family_Affection, Child_Friendly)
+# Plot with ggplot
+ggplot(Dog_df, aes(x = Family_Affection, y = Child_Friendly, fill = n)) +
+  geom_tile() +
+  scale_fill_gradient(low = "gold2", high = "firebrick2") +  # Customize colors
+  theme_minimal() +
+  labs(title = "Heatmap of Family Affection vs Child Friendly Ratings for Dog Breeds",
+       x = "Family Affection Rating",
+       y = "Child Friendly Rating",
+       fill = "Frequency")
+
+# Working Dogs Heat Map
+# Manipulate data
+Working_df <- Working_data %>%
+  filter(Family_Affection != "", Child_Friendly != "") %>%
+  count(Family_Affection, Child_Friendly)
+# Plot with ggplot
+ggplot(Working_df, aes(x = Family_Affection, y = Child_Friendly, fill = n)) +
+  geom_tile() +
+  scale_fill_gradient(low = "gray", high = "darkblue") +  # Customize colors
+  theme_minimal() +
+  labs(title = "Heatmap of Family Affection vs Child Friendly Ratings for Dog Breeds",
+       x = "Family Affection Rating",
+       y = "Child Friendly Rating",
+       fill = "Frequency")
+```
