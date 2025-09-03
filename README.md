@@ -10,3 +10,5 @@
 - dog_data: The clean dataset for this project
 - pawsitive_profiling: Our slides for the final presentation
 - team_7_summary: The summary of this project
+
+### Link to the Shiny app: https://tjmorgan462.shinyapps.io/dog_shiny_app/
